@@ -1,0 +1,10 @@
+.venv
+./compose-data
+./docker
+.gitmodules
+.gitignore
+./**/__pycache__
+.pytest_cache
+./**/*.egg-info
+./**/.pytest_cache
+./test-report.xml

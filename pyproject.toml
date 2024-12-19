@@ -1,0 +1,130 @@
+[tool.poetry]
+name = "vlmlflow"
+version = "1.0.0"
+description = "Vizorlabs Mlflow connector"
+authors = ["vizorlabs"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9"
+
+importlib_metadata = "5.2.0"
+toml = "0.10.2"
+loguru = "^0.6.0"
+pydantic = "^2.8.2"
+pydantic-settings = "^2.4.0"
+pyyaml = "^6.0"
+vlmrs = {version = "^1.5.0", source = "vizorlabs-pypi", allow-prereleases = true}
+# vlmrs = {path = "../vlmrs", develop = true}
+mlflow = "2.16.0"
+boto3 = "1.35.10"
+python-dotenv = "^1.0.0"
+easydict = "^1.10"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.2.0"
+pytest-progress = "1.2.5"
+pytest-sugar = "0.9.6"
+
+[[tool.poetry.source]]
+name = "vizorlabs-pypi"
+url = "https://pip.vizorlabs.ru/simple"
+priority = "explicit"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+#black, mypy, isort, pylint, flake8
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+exclude = ["tests", ".venv", ".mypy_cache", ".pytest_cache"]
+
+
+[tool.isort]
+profile = "black"
+skip = ".git, libs, .venv, venv, .pytest_cache, .mypy_cache, .poetry, .cache"
+
+[tool.black]
+line-length = 119
+target-version = ['py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | \venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | libs
+  | setup.py
+  | docker
+  | .poetry
+  | .venv
+  | venv
+
+)/
+'''
+
+[tool.pylint.typecheck]
+# List of members which are set dynamically and missed by pylint inference
+# system, and so shouldn't trigger E1101 when accessed. Python regular
+# expressions are accepted.
+generated-members = ["cv2.*", "torch"]
+
+[tool.pylint.main]
+ignore-paths = ["tests/*", ".venv", ".mypy_cache", ".git", "docs", "venv", ".poetry"]
+extension-pkg-whitelist = ["pydantic"]
+# Specify a score threshold under which the program will exit with error.
+fail-under = 10
+jobs = 1
+# Control the amount of potential inferred values when inferring a single object.
+# This can help the performance when dealing with large functions or complex,
+# nested conditions.
+limit-inference-results = 100
+# Pickle collected data for later comparisons.
+persistent = true
+py-version = "3.12"
+suggestion-mode = true
+
+[tool.pylint.message_control]
+disable = [
+    "unspecified-encoding",
+    "attribute-defined-outside-init",
+    "protected-access",
+    "too-few-public-methods",
+    # handled by black
+    "format",
+    # We anticipate #3512 where it will become optional
+    "fixme",
+    "cyclic-import",
+    ]
+
+[tool.pylint.basic]
+argument-naming-style = "snake_case"
+attr-naming-style = "snake_case"
+bad-names = ["foo", "bar", "baz", "toto", "tutu", "tata"]
+class-attribute-naming-style = "any"
+class-const-naming-style = "UPPER_CASE"
+class-naming-style = "PascalCase"
+const-naming-style = "any"
+function-naming-style = "snake_case"
+good-names = ["i", "j", "k", "v", "ex", "Run", "_", "fh", "pb", "df", "x", "y", "x0", "y0", "x1", "y1", "x2", "y2", "fd", "qx", "qy"]
+include-naming-hint = false
+inlinevar-naming-style = "any"
+method-naming-style = "snake_case"
+module-naming-style = "snake_case"
+variable-naming-style = "snake_case"
+disable="C0114, E0401" #, C0301, C0415, R0902, "
