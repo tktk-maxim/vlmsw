@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 import boto3
+import httpx
 import mlflow
 from botocore.exceptions import BotoCoreError
 from loguru import logger
@@ -15,242 +16,98 @@ from vlmlflow.exceptions import BucketNotFoundException, NotFoundModelException
 from vlmlflow.settings.settings import settings
 
 
-def get_selected_version_model(
-    client: mlflow.tracking.MlflowClient, model_name: str, model_version: str
-) -> ModelVersion:
+def get_all_models_with_versions() -> dict[str, list[str]]:
     """
-    Retrieves the selected version of a model from the given MLflow client.
+    Fetches a list of all available models with their versions.
 
-    Args:
-        client (mlflow.tracking.MlflowClient): The MLflow client used to retrieve the model version.
-        model_name (str): The name of the model.
-        model_version (str): The version of the model.
+    This function retrieves the names of all models and their corresponding versions
+    from the service.
 
-    Returns:
-        mlflow.entities.model_registry.ModelVersion: The selected model version.
-
-    Raises:
-        Exception: If there is no model with the given name and version.
+    :return: A list of dictionaries containing model names and their versions.
     """
-    try:
-        return client.get_model_version(
-            name=model_name,
-            version=model_version,
-        )
-    except mlflow.exceptions.RestException as exc:
-        raise NotFoundModelException(f"There is no model {model_name} with version {model_version}. {exc}") from exc
+    pass
 
 
-def pull_converted(
-    model_dir: Path,
-    model_name: str,
-    model_version: str,
-    weights_file_name: str,
-) -> bool:
+def fetch_model_version_files(model: str, version: str, client: httpx.Client) -> list[str]:
     """
-    Pulls the converted weights for a given model from S3 bucket using the provided model directory,
-    model name, model version, and weights file name.
+    Fetches the list of available files for a specific model version.
 
-    Args:
-        model_dir (Path): The directory where the model weights will be stored.
-        model_name (str): The name of the model.
-        model_version (str): The version of the model.
-        weights_file_name (str): The name of the weights file.
+    This function uses the global HTTP client to send a GET request to retrieve
+    the files associated with a model version.
 
-    Returns:
-        bool: True if the weights are successfully downloaded, False otherwise.
+    :param model: The name or identifier of the model.
+    :param version: The version of the model for which files are requested.
+    :param client: The HTTP client used to make the request.
+    :return: A list of files associated with the model and version.
+    :raises Exception: If the model or version does not exist.
     """
-    if not is_bucket_exists(settings.artifacts_converted_bucket):
-        raise BucketNotFoundException("Bucket does not exist!!!")
-
-    s3_client = boto3.client("s3", endpoint_url=settings.mlflow_s3_endpoint_url)
-
-    if not model_dir.exists():
-        model_dir.mkdir(parents=True, exist_ok=True)
-
-    model_list_objects = s3_client.list_objects(
-        Bucket=settings.artifacts_converted_bucket, Prefix=f"{model_name}/{model_version}"
-    )
-
-    matching_files = extract_file_info(model_list_objects, weights_file_name)
-
-    if len(matching_files) > 1:
-        logger.error("There are several files with current configuration: {}", matching_files)
-        return False
-
-    if not matching_files:
-        logger.warning("No converted weights for this configuration !!! weights_file_name: {}", weights_file_name)
-        return False
-
-    file = matching_files[0]
-
-    logger.info("Download converted weights: Start. Weights file name: {}", file["Key"])
-
-    try:
-        s3_client.download_file(
-            Bucket=settings.artifacts_converted_bucket,
-            Key=file["Key"],
-            Filename=str(model_dir / weights_file_name),
-        )
-        logger.success("Download converted weights: Сompleted Successfully. Weights file name: {}", file["Key"])
-        return True
-    except BotoCoreError as e:
-        logger.exception("BotoCore error occurred", exc_info=e)
-    except Exception as e:  # pylint: disable=broad-except
-        logger.exception("An unexpected error occurred", exc_info=e)
-    return False
+    pass
 
 
-def remove_base_weights_from_artifacts(artifacts: Iterable[FileInfo], model_schema: BaseModelSchema) -> list:
+async def pull(model: str, version: str, save_to: str | Path, file_list: list[str] | None = None) -> bool:
     """
-    Remove the base weights from the given list of artifacts.
+    Pulls a model from the service and saves it to the specified destination path.
+    Optionally, only specific files can be pulled if a file list is provided.
 
-    Parameters:
-        artifacts (Iterable[FileInfo]): The list of artifacts.
-        model_schema (BaseModelSchema): The model schema containing information about the base artifacts.
 
-    Returns:
-        list: The list of artifacts without the base weights.
+    :param model: The name or identifier of the model.
+    :param version: The version of the model to pull.
+    :param save_to: The directory where the model will be stored.
+    :param file_list: A list of specific files to pull. If None, the entire model is pulled.
+    :return: True if the model are successfully downloaded, False otherwise.
+    :raises Exception: If the model or version does not exist or if the destination path is invalid.
     """
-    return [artifact for artifact in artifacts if Path(artifact.path).name != model_schema.artifacts.weights]
+    pass
 
 
-def search_specific_artifacts(artifacts: Iterable[FileInfo], specific_names: Iterable[str]) -> list[FileInfo]:
+async def push(model: str, source_path: str | Path, version: str | None = None) -> bool:
     """
-    Retrieves specific artifacts from a list based on given names.
+    Pushes a model to the service, optionally specifying a version.
+    If no version is provided, the model will be pushed to the latest version.
 
-    Args:
-        artifacts (Iterable[FileInfo]): List of artifacts to search.
-        specific_names (Iterable[str]): Names of specific artifacts to search for.
+    The function expects a directory or a file path containing the model data to be pushed.
 
-    Returns:
-        list[FileInfo]: List of specific artifacts found.
-
-    Raises:
-        ValueError: If not all specific artifacts are found.
+    :param model: The name or identifier of the model.
+    :param source_path: The path to the model data. This can be a directory or a file containing the model.
+    :param version: The version of the model to push (optional). If None, pushes to the latest version.
+    :return: The status of the push operation.
+    :raises Exception: If the model or version is invalid, or if there is an issue reading the model data from the source path.
     """
-    founded_artifacts = list(filter(lambda art: Path(art.path).name in specific_names, artifacts))
-
-    # проверить, что все артефакты были найдены
-    founded_artifacts_set = set(Path(x.path).name for x in founded_artifacts)
-    specific_names_set = set(specific_names)
-
-    if not specific_names_set.issubset(founded_artifacts_set):
-        raise ValueError(f"Cannot find the following artifacts: {specific_names_set - founded_artifacts_set}")
-
-    return founded_artifacts
+    pass
 
 
-def pull(
-    model_schema: BaseModelSchema,
-    pull_force: bool = False,
-    only_base_artifacts: bool = False,
-    specific_names: Optional[Iterable[str]] = None,
-    # converted_weights_name: Optional[str] = None,
-) -> bool:
+async def get_converted_files(model: str, version: str) -> list[str]:
     """
-    Pulls the specified model version and its artifacts from the MLflow server.
+    Gets the list of converted files for a specific model and version.
 
-    Args:
-        model_schema (BaseModelSchema): An instance of the model.
-        pull_force (bool, optional): Whether to force the pull even if the artifacts already exist. Defaults to False.
-        only_base_artifacts (bool, optional): Whether to only download the base artifacts. Defaults to False.
-        specific_names (list[str], optional): A list of specific artifact names to download. Defaults to None.
-        # converted_weights_name (str, optional): The name of the converted weights file to download.
-        #                                          If provided, the function will check if the file exists in the S3 bucket
-        #                                          and download it if it does. Defaults to None.
-        #                                          For example: "yolo_result_h640_w640_b1_cc8.6_cuda11.7_trt8.4.3_fp16.engine"
-
-    Returns:
-        bool: True if the artifacts were successfully downloaded, False otherwise.
-
-    Raises:
-        FileNotFoundError: If the specified model version does not exist.
-        Exception: If the specified model version does not match the retrieved model version.
-
-    Notes:
-        - This function checks the MLflow environment variables.
-        - If the `use_rt_weights` parameter is True, the function downloads the converted TensorRT weights.
-        - If the `only_base_artifacts` parameter is True, the function only downloads the base artifacts.
-        - If the `specific_names` parameter is provided, the function downloads only the specified artifacts.
-        - The function creates the model output directory if it does not exist.
-        - The function retrieves the artifacts from the MLflow server.
-        - The function downloads the artifacts to the model output directory.
-        - If the `pull_force` parameter is False and the artifact already exists, the function skips the download.
+    :param model: The name or identifier of the model.
+    :param version: The version of the model.
+    :return: A list of converted files associated with the model version.
+    :raises Exception: If the model or version does not exist or there is an issue fetching the files.
     """
-    logger.info(
-        "name={}, version={}, only_base_artifacts={}, specific_names={}",
-        model_schema.name,
-        model_schema.version,
-        only_base_artifacts,
-        specific_names,
-    )
 
-    client = MlflowClient(tracking_uri=settings.mlflow_url)
 
-    response_model_version = get_selected_version_model(client, model_schema.name, model_schema.version)
-    if response_model_version.version != model_schema.version:
-        raise NotFoundModelException(f"There is no version {model_schema.version} for model {model_schema.name}")
+async def pull_converted_file(model: str, version: str, weight_file_name: str, save_to: str | Path) -> bool:
+    """
+    Pulls a converted file by its name from the service and saves it to the specified destination path.
 
-    logger.success("Find version: {}, stage: {}", model_schema.version, response_model_version.current_stage)
+    :param model: The name or identifier of the model.
+    :param version: The version of the model.
+    :param weight_file_name: The name of the converted file to pull.
+    :param save_to: The directory where the model will be stored.
+    :raises Exception: If the model, version, or file is invalid or there is an issue fetching the file.
+    :return: True if the converted file is successfully downloaded, False otherwise.
+    """
 
-    model_output_dir = Path(model_schema.root_dir, model_schema.name, model_schema.version)
 
-    # создать директорию для модели, в случае отсутствия
-    if not model_output_dir.exists():
-        model_output_dir.mkdir(parents=True, exist_ok=True)
+async def push_converted_file(model: str, version: str, weight_file_name: str, weight_file_path: str | Path) -> bool:
+    """
+    Uploads a converted file to the service and associates it with a specific model version.
 
-    artifact_list = []
-
-    # получить список всех артефактов
-    logger.info("Get artifacts from model version: {} from mlflow", model_schema.version)
-    artifacts_resp = client.list_artifacts(response_model_version.run_id, model_schema.artifacts_path_suffix)
-    logger.success("artifacts_resp: {}", artifacts_resp)
-
-    # получить список только базовых артефактов, отфильтровав остальные
-    if only_base_artifacts:
-        base_artifacts = model_schema.artifacts.base_attributes.values()
-        artifact_list += [
-            artifact_resp for artifact_resp in artifacts_resp if Path(artifact_resp.path).name in base_artifacts
-        ]
-
-    # если указаны конкретные артефакты, добавить их в список
-    if specific_names:
-        artifact_list += search_specific_artifacts(artifacts=artifacts_resp, specific_names=specific_names)
-
-    logger.info("result_artifact_list: {}", artifact_list)
-
-    # # загрузить конвертированные веса
-    # if not converted_weights_name:
-    #     logger.info("skip download converted weights: {}", converted_weights_name)
-    # else:
-    #     weights_path = model_schema.artifacts_path / converted_weights_name
-    #     logger.info("send converted weights path: {}", weights_path)
-
-    #     if pull_force or not weights_path.exists():
-    #         if pull_converted(
-    #             model_dir=model_schema.artifacts_path,
-    #             model_name=model_schema.name,
-    #             model_version=model_schema.version,
-    #             weights_file_name=converted_weights_name,
-    #         ):
-    #             artifact_list = remove_base_weights_from_artifacts(artifacts=artifact_list, model_schema=model_schema)
-    #     else:
-    #         logger.info(
-    #             "skip download converted weights: {}. File already exists: {}", converted_weights_name, weights_path
-    #         )
-    #         artifact_list = remove_base_weights_from_artifacts(artifacts=artifact_list, model_schema=model_schema)
-
-    # скачать артефакты
-    for artifact in artifact_list:
-        if pull_force or not Path(model_output_dir, artifact.path).exists():
-            logger.info("start download artifact: {}", artifact.path)
-            local_path = client.download_artifacts(
-                response_model_version.run_id, str(artifact.path), str(model_output_dir)
-            )
-            logger.success("artifact downloaded in: {}", local_path)
-        else:
-            logger.info(
-                "skip download artifact: {}. File already exists: {}", artifact.path, model_output_dir / artifact.path
-            )
-    return True
+    :param model: The name or identifier of the model.
+    :param version: The version of the model to upload the file to.
+    :param weight_file_name: The name of the converted file to upload.
+    :param weight_file_path: The path to the converted file on the local machine.
+    :return: The status of the upload operation.
+    :raises Exception: If the model, version, or file is invalid or there is an issue uploading the file.
+    """
