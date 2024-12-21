@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="tiktokmaxim_vlmsw",  # Имя пакета (должно быть уникальным на PyPI)
-    version="0.1.0",  # Версия
+    version="0.1.1",  # Версия
     author="Max",
     author_email="masya3_03@mail.com",
     description="Краткое описание вашей библиотеки",
