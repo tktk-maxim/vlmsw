@@ -11,12 +11,11 @@ from mlflow.entities.model_registry import ModelVersion
 from mlflow.tracking import MlflowClient
 from vlmrs.schema import BaseModelSchema
 
-from vlmlflow.common import extract_file_info, is_bucket_exists
-from vlmlflow.exceptions import BucketNotFoundException, NotFoundModelException
-from vlmlflow.settings.settings import settings
+from vlmsw.exceptions import NotFoundModelException
+from vlmsw.settings.settings import settings
 
 
-def get_all_models_with_versions() -> dict[str, list[str]]:
+async def get_all_models_with_versions() -> dict[str, list[str]]:
     """
     Fetches a list of all available models with their versions.
 
@@ -25,7 +24,13 @@ def get_all_models_with_versions() -> dict[str, list[str]]:
 
     :return: A list of dictionaries containing model names and their versions.
     """
-    pass
+    async with httpx.AsyncClient() as client:
+        response = await client.get(settings.MODEL_STORAGE_ENDPOINT)
+
+        if response.status_code != 200:
+            raise NotFoundModelException(str(response.json()['detail']))
+
+        return  response.json()
 
 
 def fetch_model_version_files(model: str, version: str, client: httpx.Client) -> list[str]:
