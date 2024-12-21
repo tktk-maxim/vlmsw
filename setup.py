@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="tiktokmaxim/vlmsw",  # Имя пакета (должно быть уникальным на PyPI)
+    name="tiktokmaxim_vlmsw",  # Имя пакета (должно быть уникальным на PyPI)
     version="0.1.0",  # Версия
     author="Max",
     author_email="masya3_03@mail.com",
